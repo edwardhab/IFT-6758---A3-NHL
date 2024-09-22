@@ -34,6 +34,7 @@ def get_player_stats(year: int, player_type: str) -> pd.DataFrame:
     df = df[df['Player'] != "Player"]
 
     # add the aggregate rows
-    df = df.append(players_multiple_teams, ignore_index=True)
+    df = pd.concat([df, players_multiple_teams], ignore_index=True)
+    print(df)
 
     return df
