@@ -95,7 +95,7 @@ def parse__nhl_game_data():
         for play in all_plays:
             #Filter for Goals, Shot on goal, Missed shot
             event_type = play.get('typeCode')
-            if event_type in [505, 506, 507]:
+            if event_type in [505, 506]:
                 shooter_id = play.get('details', {}).get('scoringPlayerId') if event_type == 505 else play.get('details', {}).get('shootingPlayerId')
                 goalie_id = play.get('details', {}).get('goalieInNetId')
                 #Interpret situation code here: https://gitlab.com/dword4/nhlapi/-/issues/112
@@ -130,7 +130,7 @@ def parse__nhl_game_data():
     return all_shot_events_df
 
 # Run this function once 
-# get_nhl_game_data(2016, 2023)
+#get_nhl_game_data(2016, 2023)
 df = parse__nhl_game_data()
 
 # Display the DataFrame in a grid layout using pandasgui
