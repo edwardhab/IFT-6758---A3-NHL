@@ -7,7 +7,13 @@ from pandasgui import show
 current_directory = os.getcwd()
 nhl_games_file_path = os.path.join(current_directory, 'nhl_game_data.json')
 nhl_players_file_path = os.path.join(current_directory, 'nhl_player_data.json')
-player_names = {}
+# Load existing player names from file if it exists
+if os.path.exists(nhl_players_file_path):
+    with open(nhl_players_file_path, 'r') as players_file:
+        player_names = json.load(players_file)
+    print(f"Loaded existing player data from {nhl_players_file_path}")
+else:
+    player_names = {}
 
 def get_nhl_game_data(start_season: int, final_season: int):
     """
