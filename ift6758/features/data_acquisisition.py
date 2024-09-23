@@ -5,7 +5,9 @@ import os
 from pandasgui import show
 
 current_directory = os.getcwd()
-file_path = os.path.join(current_directory, 'nhl_game_data.json')
+nhl_games_file_path = os.path.join(current_directory, 'nhl_game_data.json')
+nhl_players_file_path = os.path.join(current_directory, 'nhl_player_data.json')
+player_names = {}
 
 def get_nhl_game_data(start_season: int, final_season: int):
     """
@@ -44,10 +46,17 @@ def get_nhl_game_data(start_season: int, final_season: int):
             game_data = response.json()
             all_data[game_id] = game_data
 
-        with open(file_path, 'w') as json_file:
+        with open(nhl_games_file_path, 'w') as json_file:
             json.dump(all_data, json_file, indent=4)
 
-    print(f"Data saved to {file_path}")
+    print(f"Data saved to {nhl_games_file_path}")
+
+def save_player_names(player_names: dict):
+    """ Saves the player_names dictionary to a JSON file """
+    with open(nhl_players_file_path, 'w') as players_file:
+        json.dump(player_names, players_file, indent=4)
+    print(f"Player names saved to {nhl_players_file_path}")
+
 
 def get_player_name(player_id: int):
     """
@@ -62,13 +71,19 @@ def get_player_name(player_id: int):
     if player_id == None:
         return None
     
+    if str(player_id) in player_names:
+        return player_names[str(player_id)]
+    
     url = f"https://api-web.nhle.com/v1/player/{player_id}/landing"
     response = requests.get(url)
     player_data = response.json()
     first_name = player_data.get('firstName', {}).get('default')
     last_name = player_data.get('lastName', {}).get('default')
     full_name = f"{first_name} {last_name}"
+
+    player_names[str(player_id)] = full_name
     return full_name
+
 
 def parse__nhl_game_data():
     """
@@ -83,7 +98,7 @@ def parse__nhl_game_data():
     """
 
     all_shot_events_df = pd.DataFrame()
-    with open(file_path, 'r') as json_file:
+    with open(nhl_games_file_path, 'r') as json_file:
         game_data = json.load(json_file)
     #Parsing data
     #Declare data holders
@@ -109,10 +124,8 @@ def parse__nhl_game_data():
                     'eventType': play.get('typeDescKey'),
                     'teamId': play.get('details', {}).get('eventOwnerTeamId'),
                     #Call player API to get player/goalie names
-                    #'shooter': get_player_name(shooter_id),
-                    'shooter': shooter_id,
-                    #'goalie': get_player_name(goalie_id),
-                    'goalie': goalie_id,
+                    'shooter': get_player_name(shooter_id),
+                    'goalie': get_player_name(goalie_id),
                     'shotType': play.get('details', {}).get('shotType'),
                     'emptyNetAway': False if int(situation_code[0]) == 1 else True,
                     'emptyNetHome': False if int(situation_code[3]) == 1 else True,
@@ -132,6 +145,7 @@ def parse__nhl_game_data():
 # Run this function once 
 #get_nhl_game_data(2016, 2023)
 df = parse__nhl_game_data()
+save_player_names(player_names)
 
 # Display the DataFrame in a grid layout using pandasgui
 if not df.empty:
