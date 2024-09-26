@@ -30,32 +30,51 @@ def get_nhl_game_data(start_season: int, final_season: int):
     # Iterate through each season's games
     for season in range(start_season, final_season + 1):
         if season == 2016:
-            num_games = 1230
+            num_regular_season_games = 1230
         elif season in [2017, 2018]:
-            num_games = 1271
+            num_regular_season_games = 1271
         elif season == 2019:
-            num_games = 1082
+            num_regular_season_games = 1082
         elif season == 2020:
-            num_games = 868
+            num_regular_season_games = 868
         else:
-            num_games = 1312
+            num_regular_season_games = 1312
+
         
         # Iterate through each game in the regular season
-        for game_num in range(1, num_games + 1):
-
-            
+        for game_num in range(1, num_regular_season_games + 1): 
             #Query to NHL API
             game_id = f'{season}02{game_num:04d}'  # Construct the game ID
             url = f'https://api-web.nhle.com/v1/gamecenter/{game_id}/play-by-play' 
             print(f"Retrieving data from '{url}'...")
             response = requests.get(url)
             game_data = response.json()
-            all_data[game_id] = game_data
+            all_data[game_id] = game_data   
+
+        # Iterate through playoff games
+        rounds = 4
+        matchups_per_round = [8, 4, 2, 1]
+        max_games_per_series = 7
+        for round_num in range(1, rounds + 1):
+            for matchup_num in range(1, matchups_per_round[round_num - 1] + 1):
+                for game_num in range(1, max_games_per_series + 1):
+                    #Query to NHL API
+                    game_id = f'{season}030{round_num}{matchup_num}{game_num}'
+                    url = f'https://api-web.nhle.com/v1/gamecenter/{game_id}/play-by-play'
+                    print(f"Retrieving playoff data from '{url}'...")
+                    response = requests.get(url)
+                    if response.status_code == 200:
+                        game_data = response.json()
+                        all_data[game_id] = game_data
+                    else:
+                        print(f"No data found for playoff game {game_id}. Stopping the series.")
+                        break 
 
         with open(nhl_games_file_path, 'w') as json_file:
             json.dump(all_data, json_file, indent=4)
 
     print(f"Data saved to {nhl_games_file_path}")
+
 
 def save_player_names(player_names: dict):
     """ Saves the player_names dictionary to a JSON file """
@@ -148,12 +167,13 @@ def parse__nhl_game_data():
 
     return all_shot_events_df
 
-# Run this function once 
-#get_nhl_game_data(2016, 2023)
+# Run this function once
+if not os.path.exists(nhl_games_file_path): 
+    get_nhl_game_data(2016, 2023)
 df = parse__nhl_game_data()
 save_player_names(player_names)
 
-# Display the DataFrame in a grid layout using pandasgui
+#Display the DataFrame in a grid layout using pandasgui
 if not df.empty:
     show(df)
 else:
