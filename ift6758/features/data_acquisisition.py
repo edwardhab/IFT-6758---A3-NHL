@@ -18,6 +18,7 @@ class NHLDataDownloader:
         self.data_dir = data_dir if data_dir else os.getcwd()
         self.nhl_games_file_path = os.path.join(self.data_dir, 'nhl_game_data.json')
         self.nhl_players_file_path = os.path.join(self.data_dir, 'nhl_player_data.json')
+        self.parsed_data_path = os.path.join(self.data_dir, 'parsed_shot_events.csv')
 
         # Load existing player names from file if it exists
         if os.path.exists(self.nhl_players_file_path):
@@ -120,8 +121,13 @@ class NHLDataDownloader:
         Returns:
             pd.DataFrame: A DataFrame containing shot-related events for all games.
         """
-        all_shot_events_df = pd.DataFrame()
 
+        if os.path.exists(self.parsed_data_path):
+            print(f"Loading parsed data from {self.parsed_data_path}...")
+            return pd.read_csv(self.parsed_data_path)
+        
+        all_shot_events_df = pd.DataFrame()
+        
         with open(self.nhl_games_file_path, 'r') as json_file:
             game_data = json.load(json_file)
 
@@ -161,6 +167,8 @@ class NHLDataDownloader:
                 shot_events_df = pd.DataFrame(shot_events)
                 all_shot_events_df = pd.concat([all_shot_events_df, shot_events_df], ignore_index=True)
 
+        all_shot_events_df.to_csv(self.parsed_data_path, index=False)
+        print(f"Parsed data saved to {self.parsed_data_path}")
         return all_shot_events_df
 
 # # Example usage:
