@@ -3,6 +3,7 @@ import requests
 import json
 import string
 
+#V2 of the data downloader from the NHL API if first one takes too much RAM 
 class LNHDataDownload:
     def __init__(self,start_year,end_year,save_dir='data'):
         # Récupérer le répertoire depuis la variable d'environnement ou utiliser la valeur par défaut
