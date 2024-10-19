@@ -16,11 +16,11 @@ def league_shot_avg(df: pd.DataFrame, year: int) -> np.array:
     season = int(str(year) + str(year + 1))
 
     df_copy = df[df["season"] == season].copy()
-    df_copy["coord_tuple"] = df_copy[["x_coordinate", "y_coordinate"]].apply(tuple, axis=1)
+    #df_copy["coord_tuple"] = df_copy[["x_coordinate", "y_coordinate"]].apply(tuple, axis=1)
 
     data_league = np.zeros((100, 85))
 
-    for i, j in df_copy["coord_tuple"]:
+    for i, j in zip(df_copy['x_coordinate'],df_copy['y_coordinate']):
         if np.isnan(i) or np.isnan(j):
             pass
         else:
@@ -44,11 +44,11 @@ def team_shot_avg(df: pd.DataFrame, year: int, team: str) -> np.array:
     # Filter for the specified season and team
     df_copy = df[df["season"] == season].copy()
     df_copy2 = df_copy[df_copy["teamId"] == team].copy()
-    df_copy2["coord_tuple"] = df_copy2[["x_coordinate", "y_coordinate"]].apply(tuple, axis=1)
+    #df_copy2["coord_tuple"] = df_copy2[["x_coordinate", "y_coordinate"]].apply(tuple, axis=1)
 
     data_team = np.zeros((100, 85))
 
-    for i, j in df_copy2["coord_tuple"]:
+    for i, j in zip(df_copy2['x_coordinate'],df_copy2['y_coordinate']):
         if np.isnan(i) or np.isnan(j):
             pass
         else:
@@ -62,8 +62,8 @@ def team_shot_avg(df: pd.DataFrame, year: int, team: str) -> np.array:
 
     return data_team
 
-def all_team_avg(df: pd.DataFrame, start_year: int = 2016, end_year: int = 2020, sigma: int = 4,
-                        threshold: float = 0.001) -> dict:
+def all_team_avg(df: pd.DataFrame, start_year: int = 2016, end_year: int = 2020, sigma: int = 3,
+                        threshold: float = 0.0000001) -> dict:
     """
     Computes the average number of shots per hour across the league for all season in-between start_year & end_year.
     :param df: tidy frame with xy coordinates projected on a half-rink

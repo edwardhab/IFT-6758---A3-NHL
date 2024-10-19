@@ -15,7 +15,15 @@ class NHLDataDownloader:
         """
         self.start_season = start_season
         self.final_season = final_season
-        self.data_dir = data_dir if data_dir else os.getcwd()
+        
+        #Points to the data folder
+        root_directory = os.path.abspath(os.path.join(os.getcwd(), '..'))
+        self.data_dir = data_dir if data_dir else os.path.join(root_directory, 'data')
+
+        #Create directory if it doesn't already exist
+        os.makedirs(self.data_dir, exist_ok=True)
+
+        #File paths
         self.nhl_games_file_path = os.path.join(self.data_dir, 'nhl_game_data.json')
         self.nhl_players_file_path = os.path.join(self.data_dir, 'nhl_player_data.json')
         self.parsed_data_path = os.path.join(self.data_dir, 'parsed_shot_events.csv')
@@ -74,7 +82,7 @@ class NHLDataDownloader:
                             print(f"No data found for playoff game {game_id}. Stopping the series.")
                             break
 
-        # Save to JSON
+        # Save as JSON
         with open(self.nhl_games_file_path, 'w') as json_file:
             json.dump(all_data, json_file, indent=4)
 
