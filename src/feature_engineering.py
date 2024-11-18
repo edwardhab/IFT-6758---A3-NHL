@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import json
 import math
+import wandb
 
 class ShotEventFeatureEngineer:
     def __init__(self, data_dir=None):
@@ -70,9 +71,9 @@ class ShotEventFeatureEngineer:
         shot of the first period, considering which team took the shot.
         """
         # Limit to the first 5 unique games for testing
-        limited_game_ids = self.df['gameId'].unique()[:5]
+        all_game_ids = self.df['gameId'].unique()
 
-        for game_id in limited_game_ids:
+        for game_id in all_game_ids:
             game_shots = self.df[self.df['gameId'] == game_id]
             home_team_side = 'unknown'
             away_team_side = 'unknown'
@@ -356,26 +357,73 @@ class ShotEventFeatureEngineer:
         self.df.to_csv(output_path, index=False)
         print(f"DataFrame saved to {output_path}")  
 
+
+def log_filtered_dataframe(df, game_id, project_name="my_project"):
+    """
+    Filters the DataFrame for the specified game ID, creates a Weights & Biases artifact,
+    and logs the DataFrame as a table.
+    
+    Args:
+        df (pd.DataFrame): The DataFrame to filter and log.
+        game_id (str): The game ID to filter the DataFrame.
+        project_name (str): The name of the Weights & Biases project.
+    """
+    # Filter DataFrame for the specified game_id
+    df['gameId'] = df['gameId'].astype(str)
+    filtered_df = df[df['gameId'] == game_id]
+
+    #Initialize a Weights & Biases run
+    run = wandb.init(project=project_name, name=f"Filtered_Data_Run_{game_id}")
+
+    # Create a Weights & Biases artifact
+    artifact = wandb.Artifact(
+        name=f"Winnipeg_vs_Washington_{game_id}",
+        type="dataset"
+    )
+
+    # Add data to the artifact as a table
+    my_table = wandb.Table(dataframe=filtered_df)
+    artifact.add(my_table, f"Winnipeg_vs_Washington_{game_id}")
+
+    # Log the artifact
+    run.log_artifact(artifact)
+    run.finish()
+
 def main():
     feature_engineer = ShotEventFeatureEngineer()
-    feature_engineer.add_team_ids()
-    feature_engineer.add_empty_net_goal_column()
-    feature_engineer.determine_offensive_side()
-    feature_engineer.calculate_shot_distance_and_angle()
-    feature_engineer.add_previous_event_features()
-    feature_engineer.previous_event_analysis()
+    output_path = os.path.join(feature_engineer.data_dir, 'enhanced_parsed_shot_events.csv')
 
-    #Save new csv
-    feature_engineer.save_dataframe()
+    if os.path.exists(output_path):
+        print("Enhanced DataFrame already exists, skipping feature engineering.")
+        feature_engineer.df = pd.read_csv(output_path)
+    else:
+        print("Starting Feature Engineering")
+        print("Adding team ids columns")
+        feature_engineer.add_team_ids()
+        print("Adding empty net goal column")
+        feature_engineer.add_empty_net_goal_column()
+        print("Adding offensive side column")
+        feature_engineer.determine_offensive_side()
+        print("Calculating distance and angles")
+        feature_engineer.calculate_shot_distance_and_angle()
+        print("Adding previous event features")
+        feature_engineer.add_previous_event_features()
+        feature_engineer.previous_event_analysis()
+        print("Saving DataFrame")
+        feature_engineer.save_dataframe()
+
+    # Log the filtered DataFrame for the specific game
+    log_filtered_dataframe(feature_engineer.df, "2017020165", project_name="IFT6758.2024-A03")
 
     # Get the unique game IDs
     unique_game_ids = feature_engineer.df['gameId'].unique()[:1]
     
-    # Filter and print the first 3 shot events for each of the first 'unique_game_ids' games
+    # Filter and print the first 4 shot events for each of the first 'unique_game_ids' games
     for game_id in unique_game_ids:
         print(f"\nFirst 4 shot events for game ID {game_id}:")
         game_shots = feature_engineer.df[feature_engineer.df['gameId'] == game_id].head(4)
         print(game_shots)
+
 
 if __name__ == "__main__":
     main()
