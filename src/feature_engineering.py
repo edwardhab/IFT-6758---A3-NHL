@@ -176,10 +176,175 @@ class ShotEventFeatureEngineer:
             if row['offensiveSide'] == 'right':
                 angle = -angle  # Reverse the angle sign for left offensive side
 
-            return distance, angle
+            return x_shot, y_shot, distance, angle
 
         # Apply the function to each row and create a new column 'shotDistance'
-        self.df[['shotDistance', 'shotAngle']] = self.df.apply(lambda row: pd.Series(get_distance_and_angle(row)), axis=1)
+        self.df[['xCoord', 'yCoord', 'shotDistance', 'shotAngle']] = self.df.apply(lambda row: pd.Series(get_distance_and_angle(row)), axis=1)
+
+    def add_previous_event_features(self):
+        """
+        Adds information about the previous event for each shot, including:
+        - Last event type
+        - Coordinates of the last event (x, y)
+        - Time elapsed since the last event (seconds)
+        - Distance from the last event
+        """
+
+        # Pre-fetch game data for all unique game IDs in the DataFrame
+        unique_game_ids = self.df['gameId'].unique()
+        game_data_cache = {game_id: self.game_data.get(str(game_id), {}).get('plays', []) for game_id in unique_game_ids}
+
+        last_event_types = []
+        last_event_x_coords = []
+        last_event_y_coords = []
+        time_elapsed_list = []
+        distance_from_last_event = []
+
+        for _, row in self.df.iterrows():
+            game_id = str(row['gameId'])
+            event_id = row['eventId']
+            current_time = row['timeInPeriod']
+            x_coord = row['xCoord']
+            y_coord = row['yCoord']
+
+            # Initialize defaults
+            last_event_type = None
+            last_x = None
+            last_y = None
+            elapsed_time = None
+            distance = None
+
+            # Fetch plays for the current game from the cache
+            all_plays = game_data_cache.get(game_id, [])    
+
+            # Find the index of the current event in all_plays, with additional criteria for unique identification
+            current_index = next(
+                (i for i, play in enumerate(all_plays)
+                if play.get('eventId') == event_id
+                and play.get('timeInPeriod') == current_time
+                and (play.get('details', {}).get('xCoord'), play.get('details', {}).get('yCoord')) == (x_coord, y_coord)),
+                None
+            )
+
+            # Null check for current_index
+            if current_index is not None:
+                if current_index > 0:
+                    prev_event = all_plays[current_index - 1]
+                    prev_time = prev_event.get('timeInPeriod')
+                    prev_period = prev_event.get('periodDescriptor', {}).get('number')
+
+                    #Ensure previous event is from the same period
+                    if prev_period is not None and prev_period == row['period']:  
+                        last_event_type = prev_event.get('typeDescKey')
+                        last_x = prev_event.get('details', {}).get('xCoord')
+                        last_y = prev_event.get('details', {}).get('yCoord')
+                    
+                        #Calculate time elapsed
+                        if prev_time and current_time:
+                            try:
+                                curr_minutes, curr_seconds = map(int, current_time.split(":"))
+                                prev_minutes, prev_seconds = map(int, prev_time.split(":"))
+                                elapsed_time = (curr_minutes * 60 + curr_seconds) - (prev_minutes * 60 + prev_seconds)
+                            except ValueError:
+                                elapsed_time = None
+
+                        # Calculate distance from the last event
+                        try:
+                            last_x = int(last_x) if last_x is not None else None
+                            last_y = int(last_y) if last_y is not None else None
+                            if last_x is not None and last_y is not None:
+                                distance = math.sqrt((x_coord - last_x)**2 + (y_coord - last_y)**2)
+                        except (ValueError, TypeError):
+                            distance = None  
+                    else: 
+                        # If the previous event is from a different period, set default values
+                        last_event_type = "Start of period"
+                        last_x = None
+                        last_y = None
+                        elapsed_time = 0
+                        distance = 0
+                else:
+                    # If this is the first event of the game or period, set default values
+                    last_event_type = "Start of game"
+                    last_x = None
+                    last_y = None
+                    elapsed_time = 0
+                    distance = 0
+            # Append results to lists
+            last_event_types.append(last_event_type)
+            last_event_x_coords.append(last_x)
+            last_event_y_coords.append(last_y)
+            time_elapsed_list.append(elapsed_time)
+            distance_from_last_event.append(distance)
+
+
+        # Add the new columns to the DataFrame
+        self.df['lastEventType'] = last_event_types
+        self.df['lastEventXCoord'] = last_event_x_coords
+        self.df['lastEventYCoord'] = last_event_y_coords
+        self.df['timeElapsedSinceLastEvent'] = time_elapsed_list
+        self.df['distanceFromLastEvent'] = distance_from_last_event
+
+    def previous_event_analysis(self):
+        """
+        Adds three new features to the DataFrame:
+        - Rebound (bool): True if the last event was also a shot, otherwise False.
+        - Change in shot angle: The change in shot angle relative to the previous shot, only calculated for rebounds.
+        - Speed ('vitesse'): The distance from the previous event divided by the time elapsed since the previous event.
+        """
+        rebounds = []
+        shot_angle_changes = []
+        speeds = []
+
+        for idx, row in self.df.iterrows():
+            # Initialize default values
+            rebound = False
+            shot_angle_change = None
+            speed = None
+            last_angle = 0
+
+            # Determine if the last event was a shot (rebound)
+            last_event_type = row['lastEventType']
+            if last_event_type == 'shot-on-goal':
+                rebound = True
+
+                # Calculate change in shot angle
+                if pd.notnull(row['lastEventXCoord']) and pd.notnull(row['lastEventYCoord']) and pd.notnull(row['shotAngle']):
+                    try:
+                        # Calculate the angle of the previous shot relative to the net
+                        if row['offensiveSide'] == 'right':
+                            x_net, y_net = 89, 0
+                        elif row['offensiveSide'] == 'left':
+                            x_net, y_net = -89, 0
+                        else:
+                            last_angle = None
+
+                        if last_angle is not None:
+                            last_angle = math.degrees(math.atan2(row['lastEventYCoord'], abs(x_net - row['lastEventXCoord'])))
+                            # Adjust the sign of the angle based on the side
+                            if row['offensiveSide'] == 'right':
+                                last_angle = -last_angle  # Reverse the angle sign for left offensive side
+
+                            shot_angle_change = abs(row['shotAngle'] - last_angle)
+
+                    except (ValueError, TypeError):
+                        shot_angle_change = None
+
+            # Calculate speed if time elapsed is available          
+            if pd.notnull(row['timeElapsedSinceLastEvent']) and row['timeElapsedSinceLastEvent'] > 0:
+                if pd.notnull(row['distanceFromLastEvent']):
+                    speed = row['distanceFromLastEvent'] / row['timeElapsedSinceLastEvent']  
+
+
+            # Append calculated values to lists
+            rebounds.append(rebound)
+            shot_angle_changes.append(shot_angle_change)
+            speeds.append(speed)
+        
+        # Add the new columns to the DataFrame
+        self.df['rebound'] = rebounds
+        self.df['changeInShotAngle'] = shot_angle_changes
+        self.df['speed'] = speeds    
 
     def save_dataframe(self, output_filename='enhanced_parsed_shot_events.csv'):
         """
@@ -197,10 +362,12 @@ def main():
     feature_engineer.add_empty_net_goal_column()
     feature_engineer.determine_offensive_side()
     feature_engineer.calculate_shot_distance_and_angle()
-    
+    feature_engineer.add_previous_event_features()
+    feature_engineer.previous_event_analysis()
+
     #Save new csv
     feature_engineer.save_dataframe()
-    
+
     # Get the unique game IDs
     unique_game_ids = feature_engineer.df['gameId'].unique()[:1]
     
