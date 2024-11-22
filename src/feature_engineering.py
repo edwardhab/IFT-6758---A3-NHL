@@ -58,14 +58,14 @@ class ShotEventFeatureEngineer:
         """
         def calculate_game_seconds(row):
             try:
-                # Extract minutes and seconds from the timeInPeriod string
+                # Extract minutes and seconds from the timeInPeriod
                 minutes, seconds = map(int, row['timeInPeriod'].split(":"))
                 time_elapsed = minutes * 60 + seconds
                 # Add the time for completed periods before the current one
-                total_seconds = (row['period'] - 1) * 1200 + time_elapsed  # Assuming 20-minute periods (1200 seconds)
+                total_seconds = (row['period'] - 1) * 1200 + time_elapsed  #20-minute periods (1200 seconds)
                 return total_seconds
             except ValueError:
-                return None  # Handle cases where timeInPeriod is invalid
+                return None 
 
         # Apply the function to calculate game seconds for each row
         self.df['gameSeconds'] = self.df.apply(calculate_game_seconds, axis=1)
@@ -173,7 +173,7 @@ class ShotEventFeatureEngineer:
             except ValueError:
                 return None, None
             
-            # Determine net coordinates based on offensive side
+            # Determine net coordinates based on offensive side of the team shooting
             if row['offensiveSide'] == 'right':
                 x_net, y_net = 89, 0
             elif row['offensiveSide'] == 'left':
@@ -399,13 +399,22 @@ def log_filtered_dataframe(df, game_id, project_name="my_project"):
 
     # Create a Weights & Biases artifact
     artifact = wandb.Artifact(
-        name=f"Winnipeg_vs_Washington_{game_id}",
+        name="wpg_v_wsh_2017021065",
         type="dataset"
     )
 
+    #CSV path - searching under data directory
+    root_directory = os.path.abspath(os.path.join(os.getcwd(), '..'))
+    data_dir = os.path.join(root_directory, 'data')
+    filtered_df.to_csv(os.path.join(data_dir, "wpg_v_wsh_2017021065.csv"), index=False)
+    csv_path = os.path.join(data_dir, "wpg_v_wsh_2017021065.csv")
+
+    # Add the CSV file to the artifact
+    artifact.add_file(csv_path)
+
     # Add data to the artifact as a table
     my_table = wandb.Table(dataframe=filtered_df)
-    artifact.add(my_table, f"Winnipeg_vs_Washington_{game_id}")
+    artifact.add(my_table, "wpg_v_wsh_2017021065")
 
     # Log the artifact
     run.log_artifact(artifact)
