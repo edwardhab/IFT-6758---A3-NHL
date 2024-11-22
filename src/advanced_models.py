@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import numpy as np
+import cupy as cp
 from sklearn.model_selection import train_test_split
 import xgboost as xgb
 import wandb
@@ -14,7 +15,7 @@ from bayes_opt import BayesianOptimization
 from sklearn.feature_selection import SelectKBest, f_classif
 import shap
 import seaborn as sns
-
+import joblib
 
 class XGBoostModelTrainer:
     def __init__(self, data_dir):
@@ -27,7 +28,9 @@ class XGBoostModelTrainer:
         self.data_dir = data_dir
         self.df = self.load_data()
         self.preprocess_data()
+        cp.cuda.Device(0).use()  # Use GPU 0
         self.train_df, self.val_df = self.split_train_val()
+        
 
     def load_data(self):
         """
@@ -82,6 +85,18 @@ class XGBoostModelTrainer:
         train_df, val_df = train_test_split(train_val_df, test_size=0.20, random_state=42)
         return train_df, val_df
 
+    def transfer_to_gpu(self, dataframe):
+        """
+        Transfers a Pandas DataFrame to GPU using CuPy.
+        
+        Args:
+            dataframe (pd.DataFrame): The input DataFrame.
+        
+        Returns:
+            cp.ndarray: The GPU array representation of the DataFrame.
+        """
+        return cp.asarray(dataframe.values)
+    
     def train_xgboost_base(self, features, target, project_name="IFT6758.2024-A03", run_name="XGBoost_Run_Base"):
         """
         Trains an XGBoost classifier using specified features and logs metrics with Weights & Biases.
@@ -104,26 +119,34 @@ class XGBoostModelTrainer:
         # Train XGBoost model
         dtrain = xgb.DMatrix(X_train, label=y_train)
         dval = xgb.DMatrix(X_val, label=y_val)
-        params = {"objective": "binary:logistic", "eval_metric": "logloss"}
+        params = {"objective": "binary:logistic", 
+                  "eval_metric": "logloss",
+                  "tree_method": "hist",
+                  "device": "cuda"}
         model = xgb.train(params, dtrain, num_boost_round=100)
 
-        # Save and log model
-        model_file = f"{run_name}_model.xgb"
-        model.save_model(model_file)
+        # Save and log model using `.xgb` and `joblib`
+        model_file_xgb = f"{run_name}_model.xgb"
+        model_file_pkl = f"{run_name}_model.pkl"
+        
+        model.save_model(model_file_xgb)
+        joblib.dump(model, model_file_pkl)
+
         artifact = wandb.Artifact(name=f"{run_name}_model", type="model")
-        artifact.add_file(model_file)
+        artifact.add_file(model_file_xgb)  # Add .xgb
+        artifact.add_file(model_file_pkl)  # Add .pkl
         wandb.log_artifact(artifact)
 
         # Make predictions and evaluate
         y_pred_proba = model.predict(dval)
         self.plot_and_log_metrics(y_val, y_pred_proba, run_name)
         self.plot_best_params(params, run_name)
-        # SHAP Analysis
-        #self.run_shap_analysis(model, features)
+
 
     def train_xgboost_optimized(self, features, target, project_name="IFT6758.2024-A03", run_name="XGBoost_Optimized"):
         """
-        Trains an XGBoost classifier using specified features with Bayesian optimization for hyperparameter tuning and logs metrics.
+        Trains an XGBoost classifier using specified features with Bayesian optimization for hyperparameter tuning.
+        Logs metrics and saves only the best model among all boosters.
         """
         # Prepare data
         X_train = self.train_df[features].astype(float)
@@ -131,73 +154,121 @@ class XGBoostModelTrainer:
         X_val = self.val_df[features].astype(float)
         y_val = self.val_df[target].astype(int)
 
-        # Define the function to optimize
-        def xgb_evaluate(max_depth, learning_rate, n_estimators, subsample, colsample_bytree):
+        # Transfer data to GPU
+        X_train_gpu = self.transfer_to_gpu(X_train)
+        y_train_gpu = self.transfer_to_gpu(y_train)
+        X_val_gpu = self.transfer_to_gpu(X_val)
+        y_val_gpu = self.transfer_to_gpu(y_val)
+
+        # Track the best booster and its performance
+        best_model = None
+        best_params = None
+        best_booster = None
+        best_roc_auc = 0
+
+        # Function to optimize parameters for a given booster
+        def xgb_evaluate(max_depth=None, learning_rate=None, n_estimators=None, subsample=None, colsample_bytree=None, booster=None):
             params = {
                 "objective": "binary:logistic",
                 "eval_metric": "logloss",
-                "max_depth": int(max_depth),
                 "learning_rate": learning_rate,
                 "n_estimators": int(n_estimators),
-                "subsample": subsample,
-                "colsample_bytree": colsample_bytree,
-                "use_label_encoder": False
+                "booster": booster,
+                "device": "cuda"  # Enable GPU training
             }
+            if booster in ["gbtree", "dart"]:
+                params.update({
+                    "max_depth": int(max_depth),
+                    "subsample": subsample,
+                    "colsample_bytree": colsample_bytree,
+                    "tree_method": "hist",  # GPU-compatible method
+                })
+            elif booster == "gblinear":
+                # Remove tree-specific parameters for gblinear
+                params.pop("max_depth", None)
+                params.pop("subsample", None)
+                params.pop("colsample_bytree", None)
+
             xgb_model = xgb.XGBClassifier(**params)
             # Cross-validation
             skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-            cv_scores = cross_val_score(xgb_model, X_train, y_train, cv=skf, scoring='roc_auc')
+            cv_scores = cross_val_score(xgb_model, cp.asnumpy(X_train_gpu), cp.asnumpy(y_train_gpu), cv=skf, scoring='roc_auc')
             return np.mean(cv_scores)  # Return mean ROC AUC across folds
 
-        # Define the parameter bounds for optimization
-        param_bounds = {
-            "max_depth": (3, 10),
-            "learning_rate": (0.01, 0.3),
-            "n_estimators": (50, 300),
-            "subsample": (0.5, 1.0),
-            "colsample_bytree": (0.5, 1.0)
-        }
+        # Booster testing loop
+        for booster in ["gbtree", "gblinear", "dart"]:
+            print(f"\nOptimizing for booster: {booster}")
+            param_bounds = {"learning_rate": (0.01, 0.3), "n_estimators": (50, 300)}
 
-        # Perform Bayesian optimization
-        optimizer = BayesianOptimization(
-            f=xgb_evaluate,
-            pbounds=param_bounds,
-            random_state=42,
-            verbose=2
-        )
-        optimizer.maximize(init_points=3, n_iter=15)
+            if booster in ["gbtree", "dart"]:
+                param_bounds.update({
+                    "max_depth": (3, 10),
+                    "subsample": (0.5, 1.0),
+                    "colsample_bytree": (0.5, 1.0),
+                })
 
-        # Use the best parameters found
-        best_params = optimizer.max["params"]
-        best_params["max_depth"] = int(best_params["max_depth"])
-        best_params["n_estimators"] = int(best_params["n_estimators"])
+            # Perform Bayesian optimization
+            optimizer = BayesianOptimization(
+                f=lambda learning_rate, n_estimators, **kwargs: xgb_evaluate(
+                    max_depth=kwargs.get("max_depth", None),
+                    learning_rate=learning_rate,
+                    n_estimators=n_estimators,
+                    subsample=kwargs.get("subsample", None),
+                    colsample_bytree=kwargs.get("colsample_bytree", None),
+                    booster=booster
+                ),
+                pbounds=param_bounds,
+                random_state=42,
+                verbose=2
+            )
+            optimizer.maximize(init_points=5, n_iter=10)
 
-        # Print the best parameters
-        print("Best parameters found by Bayesian Optimization:")
-        print(best_params)
-        
-        # Log the best parameters to WandB
-        wandb.init(project=project_name, config=best_params, name=run_name)
-        self.plot_best_params(best_params, run_name)
+            # Use the best parameters found
+            current_params = optimizer.max["params"]
+            current_params["n_estimators"] = int(current_params["n_estimators"])
+            if "max_depth" in current_params:  # Only convert max_depth if it exists
+                current_params["max_depth"] = int(current_params["max_depth"])
+            current_params["booster"] = booster
 
-        # Train the best model
-        best_model = xgb.XGBClassifier(**best_params, objective="binary:logistic", eval_metric="logloss", use_label_encoder=False)
-        best_model.fit(X_train, y_train)
+            # Train and evaluate the current booster model
+            current_model = xgb.XGBClassifier(**current_params, objective="binary:logistic", eval_metric="auc", tree_method="hist", device="cuda")
+            current_model.fit(cp.asnumpy(X_train_gpu), cp.asnumpy(y_train_gpu))
+            y_pred_proba = current_model.predict_proba(cp.asnumpy(X_val_gpu))[:, 1]
+            current_roc_auc = roc_auc_score(cp.asnumpy(y_val_gpu), y_pred_proba)
 
-        # Save and log the best model as an artifact
-        model_file = f"{run_name}_model.xgb"
-        best_model.save_model(model_file)
-        artifact = wandb.Artifact(name=f"{run_name}_model", type="model")
-        artifact.add_file(model_file)
+            print(f"Validation ROC AUC for booster {booster}: {current_roc_auc}")
+
+            # Update the best model if the current one is better
+            if current_roc_auc > best_roc_auc:
+                best_model = current_model
+                best_params = current_params
+                best_booster = booster
+                best_roc_auc = current_roc_auc
+
+        # Log the best model and metrics
+        print(f"\nBest booster: {best_booster} with ROC AUC: {best_roc_auc}")
+        wandb.init(project=project_name, config=best_params, name=f"{run_name}_best")
+        self.plot_best_params(best_params, f"{run_name}_best")
+
+        # Save the best model
+
+        best_model_file_xgb = f"{run_name}_best_model.xgb"
+        best_model_file_pkl = f"{run_name}_best_model.pkl"
+
+        # Save in XGBoost's native format
+        best_model.save_model(best_model_file_xgb)
+        # Save with joblib in .pkl format
+        joblib.dump(best_model, best_model_file_pkl)
+
+        # Log both files as artifact
+        artifact = wandb.Artifact(name=f"{run_name}_best_model", type="model")
+        artifact.add_file(best_model_file_xgb)  # Add .xgb
+        artifact.add_file(best_model_file_pkl)  # Add .pkl
         wandb.log_artifact(artifact)
 
-        # Evaluate on the validation set
-        y_pred_proba = best_model.predict_proba(X_val)[:, 1]
-        roc_auc = roc_auc_score(y_val, y_pred_proba)
-        print(f"Validation ROC AUC: {roc_auc}")
-        wandb.log({"ROC AUC": roc_auc})
-        self.plot_and_log_metrics(y_val, y_pred_proba, run_name)
-
+        # Plot and log metrics for the best model
+        y_pred_proba = best_model.predict_proba(cp.asnumpy(X_val_gpu))[:, 1]
+        self.plot_and_log_metrics(cp.asnumpy(y_val_gpu), y_pred_proba, f"{run_name}_best")
 
     def plot_and_log_metrics(self, y_val, y_pred_proba, run_name):
         """
@@ -271,15 +342,17 @@ class XGBoostModelTrainer:
     def plot_best_params(self, best_params, run_name):
         """
         Creates a bar chart of the best parameters.
-        
+
         Args:
             best_params (dict): A dictionary containing parameter names and their best values.
         """
-        # Extract parameter names and values
-        rows = [[key, value] for key, value in best_params.items()]
+        # Convert all parameter values to strings to avoid type mismatch issues in WandB
+        rows = [[key, str(value)] for key, value in best_params.items()]
         table = wandb.Table(data=rows, columns=["Parameter", "Value"])
+        
         # Log the table to WandB
         wandb.log({f"{run_name} Best Parameters": table})
+
 
     def perform_feature_selection(self, features, target):
         """
@@ -327,7 +400,7 @@ class XGBoostModelTrainer:
         X_val = self.val_df[features].astype(float)
         shap_values = explainer(X_val, check_additivity=False)
 
-        wandb.init(project="IFT6758.2024-A03", name="xg_boost_shap_features")
+        wandb.init(project="IFT6758.2024-A03", name="xg_boost_shap_features_best_model")
 
         # Generate SHAP summary plot
         plt.figure()
