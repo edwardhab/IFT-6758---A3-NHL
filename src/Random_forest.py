@@ -15,48 +15,7 @@ import joblib
 from sklearn.base import BaseEstimator, TransformerMixin
 from imblearn.under_sampling import RandomUnderSampler
 from sklearn.model_selection import StratifiedKFold
-def custom_scorer(y_true, y_pred_proba, beta=1.0):
-    """
-    Fonction de score personnalisée qui optimise le F-beta score en testant différents seuils
-    de classification.
 
-    Arguments:
-        y_true (array) : Les vraies étiquettes (0 ou 1)
-        y_pred_proba (array) : Les probabilités prédites par le modèle
-        beta (float) : Paramètre qui contrôle l'importance relative de la précision vs le rappel
-                      beta > 1 donne plus d'importance au rappel
-                      beta < 1 donne plus d'importance à la précision
-                      beta = 1 donne une importance égale (F1-score classique)
-
-    Retourne:
-        float: Le meilleur F-beta score obtenu parmi tous les seuils testés
-    """
-    # Définition d'une série de seuils à tester entre 0.1 et 0.9
-    thresholds = np.arange(0.1, 0.9, 0.05)
-    best_score = 0
-    
-    # Test de chaque seuil pour trouver celui qui donne le meilleur score
-    for threshold in thresholds:
-        # Conversion des probabilités en prédictions binaires selon le seuil
-        y_pred = (y_pred_proba >= threshold).astype(int)
-        
-        # Calcul de la précision et du rappel pour ce seuil
-        precision = precision_score(y_true, y_pred)
-        recall = recall_score(y_true, y_pred)
-        
-        # Calcul du F-beta score si la précision et le rappel ne sont pas nuls
-        if precision + recall > 0:
-            # Formule du F-beta score :
-            # F-β = (1 + β²) * (précision * rappel) / (β² * précision + rappel)
-            score = (1 + beta**2) * (precision * recall) / (beta**2 * precision + recall)
-            # Mise à jour du meilleur score si le score actuel est meilleur
-            best_score = max(best_score, score)
-            
-    return best_score
-
-# Création d'un scorer compatible avec scikit-learn
-custom_scorer = make_scorer(custom_scorer, needs_proba=True)
-# Définition de la fonction de découpage temporel
 def temporal_split(data, n_first_games=20):
     data_sorted = data.sort_values(['gameId', 'timeInPeriod'])
     teams = data['teamId'].unique()
@@ -69,7 +28,6 @@ def temporal_split(data, n_first_games=20):
     
     return data[mask]
 
-# Définition de la classe de codage cible pour les joueurs
 class PlayerTargetEncoder(BaseEstimator, TransformerMixin):
     def __init__(self, smoothing=10):
         self.smoothing = smoothing
@@ -91,7 +49,7 @@ class PlayerTargetEncoder(BaseEstimator, TransformerMixin):
                     shots = np.sum(mask)
                     goals = np.sum(y[mask])
                     
-                    # Taux de buts lissé
+                    # Taux de réussite lissé
                     smoothed_rate = (goals + self.smoothing * self.global_mean) / (shots + self.smoothing)
                     self.player_stats[column][player] = smoothed_rate
         
@@ -108,7 +66,6 @@ class PlayerTargetEncoder(BaseEstimator, TransformerMixin):
         
         return X.map(self.player_stats).fillna(self.global_mean).to_numpy().reshape(-1, 1)
 
-# Définition de la classe de codage cible
 class TargetEncoder(BaseEstimator, TransformerMixin):
     def __init__(self, smoothing=10):
         self.smoothing = smoothing
@@ -116,7 +73,7 @@ class TargetEncoder(BaseEstimator, TransformerMixin):
         self.global_mean = None
 
     def fit(self, X, y):
-        # Assurer que X est une série pandas
+        # S'assurer que X est une série pandas
         if isinstance(X, pd.DataFrame):
             X = X.iloc[:, 0]
         
@@ -129,14 +86,14 @@ class TargetEncoder(BaseEstimator, TransformerMixin):
             cat_mask = (X == category)
             n = counts[category]
             cat_mean = np.mean(y[cat_mask])
-            # Appliquer le lissage
+            # Application du lissage
             smoothed_mean = (n * cat_mean + self.smoothing * self.global_mean) / (n + self.smoothing)
             self.target_means[category] = smoothed_mean
             
         return self
 
     def transform(self, X):
-        # Assurer que X est une série pandas
+        # S'assurer que X est une série pandas
         if isinstance(X, pd.DataFrame):
             X = X.iloc[:, 0]
         return X.map(self.target_means).fillna(self.global_mean).to_numpy().reshape(-1, 1)
@@ -149,13 +106,29 @@ def convert_time_to_seconds(time_str):
     except:
         return None
 
-# Calcul de la différence de score
 def calculate_score_differential(row):
     if row['HomevsAway'] == 'home':
         return row['home_goals'] - row['away_goals']
     else:
         return row['away_goals'] - row['home_goals']
 
+def custom_scorer(y_true, y_pred_proba, beta=1.0):
+    thresholds = np.arange(0.1, 0.9, 0.05)
+    best_score = 0
+    
+    for threshold in thresholds:
+        y_pred = (y_pred_proba >= threshold).astype(int)
+        precision = precision_score(y_true, y_pred)
+        recall = recall_score(y_true, y_pred)
+        
+        # F-beta score pour donner plus de poids à la précision ou au rappel
+        if precision + recall > 0:
+            score = (1 + beta**2) * (precision * recall) / (beta**2 * precision + recall)
+            best_score = max(best_score, score)
+            
+    return best_score
+
+#custom_scorer = make_scorer(custom_scorer, needs_proba=True)
 # Initialisation de Wandb
 wandb.init(project="IFT6758.2024-A03", name="exp_random_forest_optimized",entity="michel-wilfred-essono-university-of-montreal")
 
@@ -180,52 +153,50 @@ train_data['teamId'] = np.where(
 for col in ['speed', 'distanceFromLastEvent', 'lastEventXCoord', 'lastEventYCoord']:
     median_by_group = train_data.groupby('lastEventType')[col].transform('median')
     train_data[col] = train_data[col].fillna(median_by_group).fillna(train_data[col].median())
+# Calcul du cumul des tirs par période
+train_data['shots_period_cumsum'] = train_data.groupby(['gameId', 'period', 'teamId'])['eventType'].cumcount()
+train_data['timeInPeriod'] = train_data['timeInPeriod'].apply(convert_time_to_seconds)
+train_data = train_data.sort_values(['gameId', 'period', 'timeInPeriod'])
 
-# Étape 2 : Calculer la différence de temps entre les événements
+# Étape 2 : Calcul de la différence de temps entre les événements consécutifs
 train_data['time_diff'] = train_data.groupby(['gameId', 'period'])['timeInPeriod'].diff().fillna(0)
 
-# Étape 3 : Attribuer le temps à l'équipe qui contrôle la rondelle
+# Étape 3 : Attribution du temps à l'équipe contrôlant la rondelle
 train_data['team_possession_time'] = train_data['time_diff']
 
-# Étape 4 : Calculer le temps de possession cumulatif pour chaque équipe
+# Étape 4 : Somme cumulative du temps de possession pour chaque équipe
 train_data['cumulative_possession_time'] = (
     train_data.groupby(['gameId', 'teamId'])['team_possession_time']
     .cumsum()
 )
 
-# Ajouter le temps depuis le dernier tir
+# Ajout du temps depuis le dernier tir
 train_data['time_since_last_shot'] = train_data.groupby(['gameId', 'period', 'teamId'])['timeInPeriod'].diff().fillna(0)
-"""
-# Step 1: Calculate game-level results
-# Step 1: Filter to only the last score of each game
-# Step 1: Filter to only the final score of each game
-final_scores = train_data.groupby('gameId').tail(1)  # Get the last event for each game
 
-# Step 2: Add win, loss, and draw indicators
-final_scores['win'] = (final_scores['score_differential'] > 0).astype(int)
-final_scores['loss'] = (final_scores['score_differential'] < 0).astype(int)
-final_scores['draw'] = (final_scores['score_differential'] == 0).astype(int)
+# Calcul des pénalités consécutives
+train_data['consecutive_penalties'] = (
+        train_data.groupby(['gameId', 'teamId'])
+        ['powerplay']
+        .cumsum()
+    )
 
-# Step 3: Sort by team and game for proper rolling calculation
-final_scores = final_scores.sort_values(by=['teamId', 'gameId'])
+# Calcul des buts à domicile et à l'extérieur
+train_data['home_goals'] = ((train_data['HomevsAway'] == 'home') & (train_data['eventType'] == 'goal')).groupby(train_data['gameId']).cumsum()
+train_data['away_goals'] = ((train_data['HomevsAway'] == 'away') & (train_data['eventType'] == 'goal')).groupby(train_data['gameId']).cumsum()
+train_data['score_differential'] = train_data.apply(calculate_score_differential, axis=1)
 
-# Step 4: Calculate rolling (recent) performance metrics for the last 5 games
-final_scores['recent_wins'] = final_scores.groupby('teamId')['win'].rolling(5, min_periods=1).sum().reset_index(0, drop=True)
-final_scores['recent_losses'] = final_scores.groupby('teamId')['loss'].rolling(5, min_periods=1).sum().reset_index(0, drop=True)
-final_scores['recent_draws'] = final_scores.groupby('teamId')['draw'].rolling(5, min_periods=1).sum().reset_index(0, drop=True)
+# Calcul de la fréquence pour chaque catégorie
+frequency = train_data['lastEventType'].value_counts(normalize=True)
+train_data['lastEventType'] = train_data['lastEventType'].map(frequency)
+frequency = train_data['shotType'].value_counts(normalize=True)
+train_data['shotType'] = train_data['shotType'].map(frequency)
 
-# Step 5: Shift the rolling stats by 1 to avoid target leakage
-final_scores['recent_wins'] = final_scores.groupby('teamId')['recent_wins'].shift(1, fill_value=0)
-final_scores['recent_losses'] = final_scores.groupby('teamId')['recent_losses'].shift(1, fill_value=0)
-final_scores['recent_draws'] = final_scores.groupby('teamId')['recent_draws'].shift(1, fill_value=0)
+# Mise à jour des buts avec décalage
+train_data['home_goals'] = ((train_data['HomevsAway'] == 'home') & (train_data['eventType'] == 'goal')).groupby(train_data['gameId']).cumsum().shift(1, fill_value=0)
+train_data['away_goals'] = ((train_data['HomevsAway'] == 'away') & (train_data['eventType'] == 'goal')).groupby(train_data['gameId']).cumsum().shift(1, fill_value=0)
+train_data['score_differential'] = train_data.apply(calculate_score_differential, axis=1)
 
-# back into the main dataset
-train_data = train_data.merge(
-    final_scores[['gameId', 'teamId', 'recent_wins', 'recent_losses', 'recent_draws']],
-    how='left',
-    on=['gameId', 'teamId']
-)"""
-# Définir les groupes de caractéristiques
+# Définition des groupes de caractéristiques
 numerical_features = [
     'shotDistance', 'shotAngle', 'timeInPeriod', 'xCoord', 'yCoord','cumulative_possession_time',
     'timeElapsedSinceLastEvent', 'distanceFromLastEvent',
@@ -238,13 +209,16 @@ categorical_features = [
     'offensiveSide', 'HomevsAway'
 ]
 
+# Suppression de la colonne eventType si elle existe
+if 'eventType' in train_data.columns and 'goal' in train_data['eventType'].unique():
+    train_data = train_data.drop(columns=['eventType'])
+
 binary_features = [
     'emptyNetGoal', 'rebound'
 ]
-
 shooter_features = ['shooter']
 
-# Conversion des caractéristiques binaires en entier
+# Conversion des caractéristiques binaires en entiers
 for col in binary_features:
     train_data[col] = train_data[col].astype(int)
 
@@ -258,12 +232,12 @@ y = train_data['result'].astype(int)
 # Division des données en ensembles d'entraînement et de validation
 X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# Appliquer le sous-échantillonnage à l'ensemble d'entraînement
+# Application du sous-échantillonnage à l'ensemble d'entraînement
 sampling_strategy = 0.35   # Ajuster ce ratio selon les besoins
 rus = RandomUnderSampler(sampling_strategy=sampling_strategy, random_state=42)
 X_train, y_train = rus.fit_resample(X_train, y_train)
 
-# Définition de la pipeline de prétraitement
+# Création du pipeline de prétraitement
 numeric_transformer =  'passthrough'
 frequency_transformer = Pipeline(steps=[
     ('scaler', TargetEncoder(smoothing=10))
@@ -282,13 +256,13 @@ preprocessor = ColumnTransformer(
         ('bin', 'passthrough', binary_features)
     ])
 
-# Ajout de poids de classe pour équilibrer l'importance des cas positifs (but)
+# Ajout des poids de classe pour équilibrer l'importance des cas positifs (buts)
 class_weights = {0: 1, 1: 2}  # Ajuster ces valeurs pour donner plus de poids aux buts
 pipeline = Pipeline([
     ('preprocessor', preprocessor),
     ('classifier', RandomForestClassifier(
         random_state=42,
-        class_weight=class_weights  # Ajout de poids de classe
+        class_weight=class_weights
     ))
 ])
 
@@ -301,23 +275,24 @@ param_grid = {
     'classifier__max_depth': [10, 15, 20, 25, None],  # Limite la profondeur de l'arbre
     'classifier__min_samples_split': [5, 10, 15, 20],  # Échantillons minimum avant division
     'classifier__min_samples_leaf': [4, 6, 8, 10],    # Échantillons minimum dans les feuilles
-    'classifier__max_features': [0.5, 0.7, 'sqrt', 'log2'],  # Limite les caractéristiques considérées pour les divisions
+    'classifier__max_features': [0.5, 0.7, 'sqrt', 'log2'],  # Limite les caractéristiques pour les divisions
     'classifier__max_leaf_nodes': [50, 100, 200, None],  # Limite le nombre total de feuilles
     'classifier__min_impurity_decrease': [0.0001, 0.0005, 0.001],  # Amélioration minimum nécessaire pour la division
     
     'classifier__bootstrap': [True],
-    'classifier__oob_score': [True],  # Estimation du score hors-sac
+    'classifier__oob_score': [True],  # Estimation du score out-of-bag
 }
 
+# Configuration de la validation croisée
 cv_splitter = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-# Réalisation de la recherche aléatoire
+# Exécution de la recherche aléatoire
 random_search = RandomizedSearchCV(
     pipeline,
     param_distributions=param_grid,
     n_iter=10,
     cv=cv_splitter,
-    scoring='f1',
+    scoring='roc_auc',
     random_state=42,
     n_jobs=-1,
     verbose=2
