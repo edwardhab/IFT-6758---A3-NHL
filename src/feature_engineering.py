@@ -14,6 +14,9 @@ class ShotEventFeatureEngineer:
         self.nhl_games_file_path = os.path.join(self.data_dir, 'nhl_game_data.json')
         self.parsed_data_path = os.path.join(self.data_dir, 'parsed_shot_events.csv')
         self.df = pd.read_csv(self.parsed_data_path)
+        self.df = self.df[self.df['season'] != 20202021] #Filter out test set games
+        self.df = self.df[self.df['gameId'].astype(str).str[5] == '2'] #Filter out playoff games
+        
         # Load game data
         if os.path.exists(self.nhl_games_file_path):
             with open(self.nhl_games_file_path, 'r') as json_file:
@@ -47,6 +50,25 @@ class ShotEventFeatureEngineer:
         # Ensure columns are of integer type, fill NaN with a default value if necessary
         self.df['homeTeamId'] = self.df['homeTeamId'].fillna(0).astype(int)
         self.df['awayTeamId'] = self.df['awayTeamId'].fillna(0).astype(int)
+
+    def add_game_seconds(self):
+        """
+        Adds a column to the DataFrame representing the total game seconds elapsed 
+        from the start of the game to the current event.
+        """
+        def calculate_game_seconds(row):
+            try:
+                # Extract minutes and seconds from the timeInPeriod string
+                minutes, seconds = map(int, row['timeInPeriod'].split(":"))
+                time_elapsed = minutes * 60 + seconds
+                # Add the time for completed periods before the current one
+                total_seconds = (row['period'] - 1) * 1200 + time_elapsed  # Assuming 20-minute periods (1200 seconds)
+                return total_seconds
+            except ValueError:
+                return None  # Handle cases where timeInPeriod is invalid
+
+        # Apply the function to calculate game seconds for each row
+        self.df['gameSeconds'] = self.df.apply(calculate_game_seconds, axis=1)
 
     def add_empty_net_goal_column(self):
         """
@@ -409,8 +431,11 @@ def main():
         print("Adding previous event features")
         feature_engineer.add_previous_event_features()
         feature_engineer.previous_event_analysis()
+        print("Add game seconds")
+        feature_engineer.add_game_seconds()
         print("Saving DataFrame")
         feature_engineer.save_dataframe()
+
 
     # Log the filtered DataFrame for the specific game
     log_filtered_dataframe(feature_engineer.df, "2017020165", project_name="IFT6758.2024-A03")
