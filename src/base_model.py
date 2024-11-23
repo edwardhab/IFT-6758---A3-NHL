@@ -6,9 +6,12 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, roc_curve, auc
+from sklearn.metrics import accuracy_score, roc_curve, auc, classification_report
 from sklearn.calibration import calibration_curve
 import seaborn as sns
 import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from collections import Counter
 
 # Récupérer la clé API depuis la variable d'environnement
 api_key = os.getenv("WANDB_API_KEY")
@@ -23,6 +26,26 @@ wandb.init(project="IFT6758.2024-A03", name="exp_logistic_regression_distance_an
 df = pd.read_csv('train_data.csv')
 X_df = df[['shotDistance', 'shotAngle']]
 y_df = df['result']
+
+
+# Distribution des classes dans df['result']
+class_distribution = plt.figure(figsize=(5,4))
+y = Counter(df['result'])  # Compter les occurrences des classes
+plt.bar(y.keys(), y.values())
+plt.title('Class Distribution in y_df')
+plt.xlabel('Class')
+plt.ylabel('Counts')
+plt.xticks([0, 1])  # Ajuster les ticks selon les classes
+
+# Sauvegarde de la distribution des classes en local
+class_distribution_path = "figures/class_distribution.png"
+class_distribution.savefig(class_distribution_path)
+
+# Log de la figure dans wandb
+wandb.log({"Class Distribution": wandb.Image(class_distribution_path)})
+
+
+
 
 # Conversion en numpy array
 X_data = X_df.to_numpy()
@@ -66,6 +89,23 @@ for model_name, model in zip(model_names, models):
     artifact = wandb.Artifact(model_name, type="model")
     artifact.add_file(model_path)
     wandb.log_artifact(artifact)
+
+
+# Calcul de la matrice de confusion pour logreg_dist
+cm = confusion_matrix(y_valid, y_pred_dist)
+cm_display = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=['No Goal', 'Goal'])
+
+# Tracer la matrice de confusion
+cm_fig, ax = plt.subplots(figsize=(6, 6))
+cm_display.plot(cmap=plt.cm.Blues, ax=ax)
+cm_fig.tight_layout()
+
+# Sauvegarder la matrice de confusion en local
+cm_plot_path = "figures/confusion_matrix_logreg_dist.png"
+cm_fig.savefig(cm_plot_path)
+
+# Log de la matrice de confusion dans wandb
+wandb.log({"Confusion Matrix (logreg_dist)": wandb.Image(cm_plot_path)})
 
 # Baseline aléatoire
 prob_rand = np.random.uniform(0, 1, prob_comb.shape)
@@ -206,4 +246,19 @@ calibration_plot.savefig(calibration_plot_path)
 wandb.log({"Calibration Curve": wandb.Image(calibration_plot_path)})
 
 # Affichage de la courbe de calibration
-plt.show()
+# Rapport de classification pour chaque modèle
+classification_reports = {
+    "Logreg Distance": classification_report(y_valid, y_pred_dist),
+    "Logreg Angle": classification_report(y_valid, y_pred_ang),
+    "Logreg Combined": classification_report(y_valid, y_pred_comb),
+    "Random Model": classification_report(y_valid, y_pred_rand)
+}
+
+# Enregistrement des rapports de classification localement et dans wandb
+for model_name, report in classification_reports.items():
+    # Sauvegarde en local
+    report_path = f"reports/{model_name}_classification_report.txt"
+    os.makedirs("reports", exist_ok=True)
+    with open(report_path, 'w') as f:
+        f.write(report)
+    
