@@ -40,7 +40,6 @@ def predict():
     """
     Predict endpoint: Accepts JSON payload or reads data from a CSV file and returns predictions.
     """
-    global current_model
     if current_model is None:
         return jsonify({'error': 'No model loaded. Please load a model first using /download_registry_model.'}), 400
 
@@ -115,7 +114,7 @@ def download_registry_model():
             app.logger.info(f"Downloading model artifact {artifact_name}...")
             api = wandb.Api()
             project_name = os.environ.get("WANDB_PROJECT", "IFT6758.2024-A03")
-            entity_name = os.environ.get("WANDB_ENTITY", "your-entity-name")  # Replace with your entity name
+            entity_name = os.environ.get("WANDB_ENTITY", "michel-wilfred-essono-university-of-montreal")  
             artifact = api.artifact(f"{entity_name}/{project_name}/{artifact_name}")
             model_path = artifact.download()
 
