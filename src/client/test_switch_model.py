@@ -33,6 +33,7 @@ def test_real_game_client():
     try:
         # Process the first game and get predictions
         logger.info(f"Processing first game ID: {game_id}")
+        print(serving_client.logs())
         predictions = game_client.process_game(game_id)
 
         # Print the results for the first game

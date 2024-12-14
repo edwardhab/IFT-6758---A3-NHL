@@ -57,7 +57,7 @@ class ServingClient:
             url = f"{self.base_url}/logs"
             #Send the GET request to the /logs endpoint
             response = requests.get(url)
-            return response.json()
+            return response
         except requests.RequestException as e:
             logger.error(f"Error fetching logs from server: {e}")
             raise

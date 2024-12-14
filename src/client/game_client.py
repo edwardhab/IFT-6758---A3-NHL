@@ -93,7 +93,7 @@ class GameClient:
             logger.info("No new events to process.")
             return pd.DataFrame()
         
-        preprocessed_events = preprocessed_events.dropna()
+        preprocessed_events = preprocessed_events.fillna(0)
         
         processed_events = self.send_to_prediction_service(preprocessed_events)
         if processed_events.empty:
