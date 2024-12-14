@@ -52,7 +52,7 @@ def predict():
             return jsonify({'error': 'No valid input provided. Please provide a JSON payload.'}), 400
 
         # Predict probabilities
-        predictions = current_model.predict_proba(df)[:, 1]  
+        predictions = current_model.predict_proba(df.to_numpy())[:, 1]
         return jsonify({'predictions': predictions.tolist()})
     except Exception as e:
         app.logger.error(f"Error during prediction: {e}")

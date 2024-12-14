@@ -16,6 +16,7 @@ def test_real_game_client():
     # Switch to the "logreg_dist:latest" model
     try:
         logger.info("Switching to the model")
+        # CHANGE MODEL NAME HERE TO "logreg_dist" TO SWITCH TO THE DISTRIBUTED MODEL OR "logreg_comb" TO SWITCH TO THE COMBINED MODEL
         model_switch_response = serving_client.download_registry_model(model="logreg_dist", version="latest")
         logger.info(f"Model switched successfully: {model_switch_response}")
     except Exception as e:
