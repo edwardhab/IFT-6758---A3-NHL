@@ -15,6 +15,7 @@ LOG_FILE = os.environ.get("FLASK_LOG", "flask.log")
 current_model = None
 current_model_name = None
 
+@app.before_first_request
 def initialize_application():
     """
     Initializes logging, loads the default model, and preprocesses the data.
@@ -23,17 +24,19 @@ def initialize_application():
 
     # Setup logging
     logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s - %(message)s')
-
     # Load the default model if specified
     default_model_path = os.path.join(os.getcwd(), 'artifacts', 'logreg_comb-v0', 'logreg_comb.pkl')
-    if default_model_path and os.path.exists(default_model_path):
+    container_default_model_path = os.path.join(os.getcwd(), 'serving', 'artifacts', 'logreg_comb-v0', 'logreg_comb.pkl')
+    if default_model_path and (os.path.exists(default_model_path) or os.path.exists(container_default_model_path)):
         try:
-            current_model = joblib.load(default_model_path)
+            if(os.path.exists(default_model_path)):
+                current_model = joblib.load(default_model_path)
+            else:
+                current_model = joblib.load(container_default_model_path)
             current_model_name = 'logreg_comb:latest'
             app.logger.info('Successfully loaded default model: logreg_comb:latest')
         except Exception as e:
             app.logger.error(f"Error loading default model: {e}")
-
 
 @app.route('/predict', methods=['POST'])
 def predict():

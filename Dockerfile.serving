@@ -8,7 +8,7 @@
 
 # https://docs.docker.com/engine/reference/builder/#from
 # You shouldn't need to change this
-FROM python:3.10
+FROM python:3.7
 
 # https://docs.docker.com/engine/reference/builder/#workdir
 # Create and cd into /code as your working directory
