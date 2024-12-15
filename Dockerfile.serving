@@ -1,0 +1,66 @@
+# To build a container, you will use the docker build command
+# https://docs.docker.com/engine/reference/commandline/build/
+#
+#   docker build -t <IMAGE TAG> -f Dockerfile.serving .
+#   docker build -t <IMAGE TAG> -f Dockerfile.jupyter .
+#
+
+
+# https://docs.docker.com/engine/reference/builder/#from
+# You shouldn't need to change this
+FROM python:3.10
+
+# https://docs.docker.com/engine/reference/builder/#workdir
+# Create and cd into /code as your working directory
+WORKDIR /code
+
+# Copy the requirements.txt from the current directory 
+ADD ./requirements.txt ./requirements.txt
+
+
+# The main docker commands you will find useful:
+# 
+# Add a file or directory
+# https://docs.docker.com/engine/reference/builder/#add
+#
+#
+# Copy the required Python files from the src directory into the container
+ADD ./src/client/game_client.py ./client/game_client.py
+ADD ./src/client/game_fetcher.py ./client/game_fetcher.py
+ADD ./src/client/serving_client.py ./client/serving_client.py
+ADD ./src/serving/flask_service.py ./serving/flask_service.py
+
+#
+# Run a shell command (tip: chain shell commands with && rather than multiple RUN commands)
+# https://docs.docker.com/engine/reference/builder/#run
+#
+#       RUN <SHELL COMMAND>   
+#
+# Set an environment variable:
+# https://docs.docker.com/engine/reference/builder/#env
+#
+#       ENV <ENV_VAR>=<DEFAULT>
+#
+# Expose a port
+# https://docs.docker.com/engine/reference/builder/#port
+#
+EXPOSE 5000
+#
+# Provide default command for executing container
+# https://docs.docker.com/engine/reference/builder/#cmd
+#
+#       CMD <SHELL COMMAND>
+
+
+# TODO: Add default model artifacts -> log reg model (distance + angle)
+ADD ./src/serving/artifacts/logreg_comb-v0 ./serving/artifacts/logreg_comb-v0
+
+# TODO: install libs
+# Install required Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+
+# TODO: specify default command - this is not required because you can always specify the command
+# either with the docker run command or in the docker-compose file
+CMD ["python", "./serving/flask_service.py"]
+

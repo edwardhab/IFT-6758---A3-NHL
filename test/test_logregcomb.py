@@ -1,6 +1,6 @@
 import logging
-from game_client import GameClient
-from serving_client import ServingClient
+from ..src.client.game_client import GameClient
+from ..src.client.serving_client import ServingClient
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
