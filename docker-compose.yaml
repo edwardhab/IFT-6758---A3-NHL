@@ -1,30 +1,32 @@
-# docker-compose.yml
-version: '3'
+version: '3.8'
 
 services:
   serving:
     build:
-      context: ./
-      dockerfile: ./Dockerfile.serving
+      context: ./  # Path to your Dockerfile
+      dockerfile: ./Dockerfile.serving  # Path to your serving Dockerfile
     image: ift6758/serving:latest
     ports:
-      - "5000:5000"
+      - "5000:5000"  # Expose port 5000 for serving
     environment:
-      WANDB_API_KEY: ${WANDB_API_KEY}
+      WANDB_API_KEY: ${WANDB_API_KEY}  # Ensure this is set in your environment or in .env file
     command: ["python", "./serving/flask_service.py"]
+    networks:
+      - app-network  # Specify the network for serving
 
-###### Uncomment below when you're ready to add the final notebook container to your docker compose
-##  streamlit:
-##    build:
-##      context: ./
-##      dockerfile: ./Dockerfile.streamlit
-##      args:
-##        ARG: <ARG>
-##    image: ift6758/streamlit:<TAG>
-##    ports:
-##      - <STREAMLIT_PORT>:<STREAMLIT_PORT>
-##    environment:
-##      OTHER_DOCKER_ENV_VAR = ${OTHER_LOCAL_ENV_VAR}
-      
+  streamlit:
+    build:
+      context: ./  # Path to your Dockerfile
+      dockerfile: ./Dockerfile.streamlit  # Path to your streamlit Dockerfile
+    image: ift6758/streamlit:latest
+    ports:
+      - "8501:8501"  # Expose port 8501 for Streamlit
+    environment:
+      WANDB_API_KEY: ${WANDB_API_KEY}  # Ensure this is set in your environment or in .env file
+    command: ["streamlit", "run", "streamlit_interface.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    networks:
+      - app-network  # Specify the network for streamlit
 
-     
+networks:
+  app-network:
+    driver: bridge  # Create a custom bridge network

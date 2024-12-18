@@ -78,7 +78,7 @@ class GameClient:
         """
         return self.serving_client.predict(preprocessed_events)
 
-    def process_game(self, game_id: str) -> pd.DataFrame:
+    def process_game(self, game_id: str):
         """
         Processes a game: fetches events, preprocesses them, and sends them to the prediction service.
 
@@ -86,17 +86,27 @@ class GameClient:
             game_id (str): The game ID.
 
         Returns:
-            pd.DataFrame: Processed events with predictions.
+            pd.DataFrame, bool, int, str, str, str, int, int: Processed events with predictions, game status, period, 
+                                                            time left, home team, away team, home score, away score
         """
         preprocessed_events = self.preprocess_events(game_id)
         if preprocessed_events.empty:
             logger.info("No new events to process.")
-            return pd.DataFrame()
-        
+            return pd.DataFrame(), False, 0, "", "", "", 0, 0  # Modify this line to include the additional info
+
         preprocessed_events = preprocessed_events.fillna(0)
         
         processed_events = self.send_to_prediction_service(preprocessed_events)
         if processed_events.empty:
             logger.info("No more events left to process.")
 
-        return processed_events
+        # Simulating game info (replace with actual logic to fetch game status, period, teams, and scores)
+        live = True  # Example value
+        period = 2  # Example value
+        timeLeft = "10:00"  # Example value
+        home = "Team A"  # Example value
+        away = "Team B"  # Example value
+        home_score = 3  # Example value
+        away_score = 2  # Example value
+
+        return processed_events, live, period, timeLeft, home, away, home_score, away_score

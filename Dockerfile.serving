@@ -1,66 +1,32 @@
-# To build a container, you will use the docker build command
-# https://docs.docker.com/engine/reference/commandline/build/
-#
-#   docker build -t <IMAGE TAG> -f Dockerfile.serving .
-#   docker build -t <IMAGE TAG> -f Dockerfile.jupyter .
-#
-
-
-# https://docs.docker.com/engine/reference/builder/#from
-# You shouldn't need to change this
+# Utilisation de l'image de base Python 3.7
 FROM python:3.7
 
-# https://docs.docker.com/engine/reference/builder/#workdir
-# Create and cd into /code as your working directory
+# Créer et se déplacer dans le répertoire de travail /code
 WORKDIR /code
 
-# Copy the requirements.txt from the current directory 
+# Ajouter le fichier requirements.txt dans l'image Docker
 ADD ./requirements.txt ./requirements.txt
 
-
-# The main docker commands you will find useful:
-# 
-# Add a file or directory
-# https://docs.docker.com/engine/reference/builder/#add
-#
-#
-# Copy the required Python files from the src directory into the container
+# Ajouter tous les fichiers nécessaires du répertoire 'src' dans l'image Docker
 ADD ./src/client/game_client.py ./client/game_client.py
 ADD ./src/client/game_fetcher.py ./client/game_fetcher.py
 ADD ./src/client/serving_client.py ./client/serving_client.py
 ADD ./src/serving/flask_service.py ./serving/flask_service.py
 
-#
-# Run a shell command (tip: chain shell commands with && rather than multiple RUN commands)
-# https://docs.docker.com/engine/reference/builder/#run
-#
-#       RUN <SHELL COMMAND>   
-#
-# Set an environment variable:
-# https://docs.docker.com/engine/reference/builder/#env
-#
-#       ENV <ENV_VAR>=<DEFAULT>
-#
-# Expose a port
-# https://docs.docker.com/engine/reference/builder/#port
-#
-EXPOSE 5000
-#
-# Provide default command for executing container
-# https://docs.docker.com/engine/reference/builder/#cmd
-#
-#       CMD <SHELL COMMAND>
-
-
-# TODO: Add default model artifacts -> log reg model (distance + angle)
+# Ajouter les fichiers du modèle préexistant
 ADD ./src/serving/artifacts/logreg_comb-v0 ./serving/artifacts/logreg_comb-v0
 
-# TODO: install libs
-# Install required Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Créer un dossier 'wheels' dans le répertoire de travail actuel
+RUN mkdir -p /code/wheels
 
+# Copier les paquets téléchargés localement dans le répertoire 'wheels'
+ADD ./wheels /code/wheels
 
-# TODO: specify default command - this is not required because you can always specify the command
-# either with the docker run command or in the docker-compose file
+# Installer les dépendances à partir des paquets téléchargés localement
+RUN pip install --no-cache-dir /code/wheels/*
+
+# Exposer le port 5000 pour que Flask puisse écouter les connexions
+EXPOSE 5000
+
+# Spécifier la commande par défaut pour exécuter le service Flask
 CMD ["python", "./serving/flask_service.py"]
-
