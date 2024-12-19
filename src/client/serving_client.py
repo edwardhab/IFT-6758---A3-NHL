@@ -10,7 +10,7 @@ class ServingClient:
     def __init__(self, ip: str = "0.0.0.0", port: int = 5000, features=['distance', 'angle']):
         self.base_url = f"http://{ip}:{port}"
         logger.info(f"Initializing client; base URL: {self.base_url}")
-
+        self.logger = logger
         self.features = features
 
 
@@ -62,7 +62,7 @@ class ServingClient:
             logger.error(f"Error fetching logs from server: {e}")
             raise
 
-    def download_registry_model(self, model: str, version: str) -> dict:
+    def download_registry_model(self, workspace: str, model: str, version: str) -> dict:
         """
         Triggers a "model swap" in the service; the workspace, model, and model version are
         specified and the service looks for this model in the model registry and tries to
@@ -87,7 +87,7 @@ class ServingClient:
                 
             #Prepare the payload
             artifact_name = f"{model}:{version}"
-            payload = {"artifact_name": artifact_name}
+            payload = {"artifact_name": artifact_name, "workspace_name": workspace}
 
             #Send the POST request to the /download_registry_model endpoint
             response = requests.post(url, json=payload)

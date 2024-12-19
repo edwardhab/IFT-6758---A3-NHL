@@ -15,7 +15,7 @@ LOG_FILE = os.environ.get("FLASK_LOG", "flask.log")
 current_model = None
 current_model_name = None
 
-@app.before_first_request
+#@app.before_first_request
 def initialize_application():
     """
     Initializes logging, loads the default model, and preprocesses the data.
@@ -53,7 +53,7 @@ def predict():
             df = pd.DataFrame(data)
         else:
             return jsonify({'error': 'No valid input provided. Please provide a JSON payload.'}), 400
-
+        
         # Predict probabilities
         predictions = current_model.predict_proba(df.to_numpy())[:, 1]
         return jsonify({'predictions': predictions.tolist()})
@@ -93,6 +93,7 @@ def download_registry_model():
         # Parse input JSON
         data = request.get_json()
         artifact_name = data['artifact_name']  # e.g., "logreg_dist:latest"
+        workspace_name = data['workspace_name']  # e.g., "IFT6758.2024-A03"
 
         # Check if the requested model is already loaded in memory
         if current_model_name == artifact_name:
@@ -116,7 +117,7 @@ def download_registry_model():
             # Initialize WandB API and download the artifact
             app.logger.info(f"Downloading model artifact {artifact_name}...")
             api = wandb.Api()
-            project_name = os.environ.get("WANDB_PROJECT", "IFT6758.2024-A03")
+            project_name = os.environ.get("WANDB_PROJECT", workspace_name)
             entity_name = os.environ.get("WANDB_ENTITY", "michel-wilfred-essono-university-of-montreal")  
             artifact = api.artifact(f"{entity_name}/{project_name}/{artifact_name}")
             model_path = artifact.download()

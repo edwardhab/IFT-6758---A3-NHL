@@ -13,6 +13,8 @@ class NHLGameDataProcessor:
         """
         self.game_id = game_id
         self.api_base_url = api_base_url
+        self.period = None
+        self.timeRemainingInPeriod = None
         self.nhl_game_data = None
         self.nhl_shot_events = None
         self.nhl_game_events = None
@@ -51,6 +53,12 @@ class NHLGameDataProcessor:
                 shot_details = {
                     'gameId': self.game_id,
                     'eventId': play.get('eventId'),
+                    'homeTeam': self.nhl_game_data.get("homeTeam", {}).get("commonName", {}).get("default", "Unknown Home Team"),
+                    'homeTeamId': self.nhl_game_data.get("homeTeam", {}).get("id", {}),
+                    'awayTeam': self.nhl_game_data.get("awayTeam", {}).get("commonName", {}).get("default", "Unknown Away Team"),
+                    'awayTeamId': self.nhl_game_data.get("awayTeam", {}).get("id", {}),
+                    'homeScore': play.get('details', {}).get('homeScore'),
+                    'awayScore': play.get('details', {}).get('awayScore'),
                     'period': play.get('periodDescriptor', {}).get('number'),
                     'eventType': play.get('typeDescKey'),
                     'teamId': play.get('details', {}).get('eventOwnerTeamId'),
@@ -230,3 +238,42 @@ class NHLGameDataProcessor:
         self.nhl_shot_events[['distance', 'angle']] = self.nhl_shot_events.apply(
             lambda row: pd.Series(get_distance_and_angle(row)), axis=1
         )
+
+    def update_scores(self):
+        """
+        Updates missing homeScore and awayScore values by forward-filling
+        the last known scores.
+
+        Args:
+            df (pd.DataFrame): The input DataFrame containing shot events.
+
+        Returns:
+            pd.DataFrame: The DataFrame with updated homeScore and awayScore columns.
+        """
+        #Initialize starting scores to 0
+        if not self.nhl_shot_events.empty:
+            if pd.isna(self.nhl_shot_events.loc[0, 'homeScore']):
+                self.nhl_shot_events.loc[0, 'homeScore'] = 0
+            if pd.isna(self.nhl_shot_events.loc[0, 'awayScore']):
+                self.nhl_shot_events.loc[0, 'awayScore'] = 0
+
+        # Forward-fill the missing scores
+        self.nhl_shot_events['homeScore'] = self.nhl_shot_events['homeScore'].fillna(method='ffill')
+        self.nhl_shot_events['awayScore'] = self.nhl_shot_events['awayScore'].fillna(method='ffill')
+
+    def get_time_remaining_period(self):
+        """
+        Retrieves the time remaining in the period for the last play of the game.
+
+        Returns:
+            str: The time remaining in the period for the last play, or None if no plays exist.
+        """
+        if not self.nhl_game_events:
+            print("No plays available.")
+            return None
+        #'timeRemainingInPeriod': play.get('timeRemaining', {}),
+        # Get the last play
+        last_play = self.nhl_game_events[-1]
+        # Access the time remaining in the period
+        self.period = last_play.get('periodDescriptor', {}).get('number')
+        self.timeRemainingInPeriod = last_play.get('timeRemaining', {})

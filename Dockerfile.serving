@@ -1,32 +1,24 @@
-# Utilisation de l'image de base Python 3.7
+
 FROM python:3.7
 
-# Créer et se déplacer dans le répertoire de travail /code
 WORKDIR /code
 
-# Ajouter le fichier requirements.txt dans l'image Docker
+# Copy the requirements.txt from the current directory 
 ADD ./requirements.txt ./requirements.txt
 
-# Ajouter tous les fichiers nécessaires du répertoire 'src' dans l'image Docker
+# Copy the required Python files from the src directory into the container
 ADD ./src/client/game_client.py ./client/game_client.py
 ADD ./src/client/game_fetcher.py ./client/game_fetcher.py
 ADD ./src/client/serving_client.py ./client/serving_client.py
 ADD ./src/serving/flask_service.py ./serving/flask_service.py
 
-# Ajouter les fichiers du modèle préexistant
-ADD ./src/serving/artifacts/logreg_comb-v0 ./serving/artifacts/logreg_comb-v0
 
-# Créer un dossier 'wheels' dans le répertoire de travail actuel
-RUN mkdir -p /code/wheels
-
-# Copier les paquets téléchargés localement dans le répertoire 'wheels'
-ADD ./wheels /code/wheels
-
-# Installer les dépendances à partir des paquets téléchargés localement
-RUN pip install --no-cache-dir /code/wheels/*
-
-# Exposer le port 5000 pour que Flask puisse écouter les connexions
 EXPOSE 5000
 
-# Spécifier la commande par défaut pour exécuter le service Flask
+# TODO: Add default model artifacts -> log reg model (distance + angle)
+ADD ./src/serving/artifacts/logreg_comb-v0 ./serving/artifacts/logreg_comb-v0
+
+# Install required Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
 CMD ["python", "./serving/flask_service.py"]
