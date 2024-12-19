@@ -15,7 +15,7 @@ LOG_FILE = os.environ.get("FLASK_LOG", "flask.log")
 current_model = None
 current_model_name = None
 
-#@app.before_first_request
+@app.before_first_request
 def initialize_application():
     """
     Initializes logging, loads the default model, and preprocesses the data.
@@ -53,7 +53,7 @@ def predict():
             df = pd.DataFrame(data)
         else:
             return jsonify({'error': 'No valid input provided. Please provide a JSON payload.'}), 400
-        
+
         # Predict probabilities
         predictions = current_model.predict_proba(df.to_numpy())[:, 1]
         return jsonify({'predictions': predictions.tolist()})
