@@ -56,8 +56,11 @@ class GameClient:
         # Use NHLGameDataProcessor to fetch and parse game data
         processor = NHLGameDataProcessor(game_id, self.api_base_url)
         processor.fetch_game_data()
-        processor.parse_nhl_game_data()
 
+        if processor.nhl_game_events is None  or not processor.nhl_game_events:
+            logger.info("No shot events found.")
+            return None
+        processor.parse_nhl_game_data()
         # Add derived features
         processor.add_team_ids()
         processor.add_empty_net_goal_column()

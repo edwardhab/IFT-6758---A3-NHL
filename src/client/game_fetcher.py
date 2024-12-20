@@ -1,6 +1,9 @@
 import requests
 import pandas as pd
 import math
+import logging
+
+logger = logging.getLogger(__name__)
 
 class NHLGameDataProcessor:
     def __init__(self, game_id: str, api_base_url: str = "https://api-web.nhle.com/v1/gamecenter"):
@@ -26,11 +29,15 @@ class NHLGameDataProcessor:
         Returns:
             pd.DataFrame: A DataFrame containing all events for the game.
         """
-        url = f"{self.api_base_url}/{self.game_id}/play-by-play"
-        response = requests.get(url)
-        response.raise_for_status()  # Raises an error if the request fails
-        self.nhl_game_data = response.json()
-        self.nhl_game_events = response.json().get("plays", [])
+        try:
+            url = f"{self.api_base_url}/{self.game_id}/play-by-play"
+            response = requests.get(url)
+            response.raise_for_status()  # Raises an error if the request fails
+            self.nhl_game_data = response.json()
+            self.nhl_game_events = self.nhl_game_data.get("plays", [])
+        except requests.RequestException as e:
+            logger.error(f"Error fetching game data for game_id={self.game_id}: {e}. ")
+            return None
 
 
     def parse_nhl_game_data(self):

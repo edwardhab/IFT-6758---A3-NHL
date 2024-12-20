@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import json
 from src.client.game_client import GameClient  # Corrected import
 from src.client.serving_client import ServingClient
@@ -96,8 +97,8 @@ def ping_game_id(game_id):
                 st.write(f'Period {period} - {remainingTimeInPeriod} left')
 
                 cols = st.columns(2)
-                cols[0].metric(label=f'{home_team} xG (actual)', value=f"{total_home_xG:.1f} ({home_score})", delta=round(home_score - total_home_xG, 1))
-                cols[1].metric(label=f'{away_team} xG (actual)', value=f"{total_away_xG:.1f} ({away_score})", delta=round(away_score - total_away_xG, 1))
+                cols[0].metric(label=f'{home_team} xG (actual)', value=f"{total_home_xG:.1f} ({int(home_score)})", delta=round(home_score - total_home_xG, 1))
+                cols[1].metric(label=f'{away_team} xG (actual)', value=f"{total_away_xG:.1f} ({int(away_score)})", delta=round(away_score - total_away_xG, 1))
                 st.write('No new events to process.')
 
                 # Display previously stored results_df if available
@@ -127,6 +128,10 @@ def ping_game_id(game_id):
     else:
         combined_results_df = results_df
 
+    # Convert all integer columns from int64 to int (if any)
+    for col in combined_results_df.select_dtypes(include=[np.int64]).columns:
+        combined_results_df[col] = combined_results_df[col].astype(int)
+
     data[model][game_id]['results_df'] = combined_results_df.to_dict(orient='records')
     # Save updated tracker data
     with open('tracker.json', 'w') as outfile:
@@ -143,8 +148,8 @@ def ping_game_id(game_id):
         total_away_xG = data[model][game_id]['cumulative_away_xG']
 
         cols = st.columns(2)
-        cols[0].metric(label=f'{home_team} xG (actual)', value=f"{total_home_xG:.1f} ({final_home_score})", delta=round(final_home_score - total_home_xG, 1))
-        cols[1].metric(label=f'{away_team} xG (actual)', value=f"{total_away_xG:.1f} ({final_away_score})", delta=round(final_away_score - total_away_xG, 1))
+        cols[0].metric(label=f'{home_team} xG (actual)', value=f"{total_home_xG:.1f} ({int(final_home_score)})", delta=round(final_home_score - total_home_xG, 1))
+        cols[1].metric(label=f'{away_team} xG (actual)', value=f"{total_away_xG:.1f} ({int(final_away_score)})", delta=round(final_away_score - total_away_xG, 1))
 
         # Display results_df
         st.subheader("Data used for predictions (and predictions)")
