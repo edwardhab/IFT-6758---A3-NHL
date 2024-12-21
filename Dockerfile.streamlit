@@ -1,0 +1,32 @@
+# Dockerfile.streamlit - to build the container for Streamlit
+
+# Use Python 3.7 as the base image
+FROM python:3.7
+
+# Set the working directory to /code inside the container
+WORKDIR /code
+
+# Copy the requirements.txt file into the container
+COPY ./requirements.txt .
+
+# Copy the Streamlit application and necessary files into the container
+COPY ./src ./src
+COPY ./streamlit_interface.py . 
+COPY ./src/client/game_client.py .
+COPY ./src/client/game_fetcher.py .
+COPY ./src/client/serving_client.py .
+COPY ./src/serving/flask_service.py .
+
+# Install the necessary Python packages
+RUN pip install --upgrade pip
+RUN pip install --no-cache-dir -r requirements.txt --timeout 600
+
+# Environment variables (use wandb API key instead of COMET_API_KEY)
+ENV WANDB_API_KEY =${WANDB_API_KEY}
+
+
+# Expose the port Streamlit will run on (default 8501)
+EXPOSE 8501
+
+# Command to run Streamlit when the container starts
+CMD ["streamlit", "run", "streamlit_interface.py", "--server.port=8501", "--server.address=0.0.0.0"]

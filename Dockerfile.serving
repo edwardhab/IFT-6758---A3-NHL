@@ -1,0 +1,24 @@
+
+FROM python:3.7
+
+WORKDIR /code
+
+# Copy the requirements.txt from the current directory 
+ADD ./requirements.txt ./requirements.txt
+
+# Copy the required Python files from the src directory into the container
+ADD ./src/client/game_client.py ./client/game_client.py
+ADD ./src/client/game_fetcher.py ./client/game_fetcher.py
+ADD ./src/client/serving_client.py ./client/serving_client.py
+ADD ./src/serving/flask_service.py ./serving/flask_service.py
+
+
+EXPOSE 5000
+
+# TODO: Add default model artifacts -> log reg model (distance + angle)
+ADD ./src/serving/artifacts/logreg_comb-v0 ./serving/artifacts/logreg_comb-v0
+
+# Install required Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+CMD ["python", "./serving/flask_service.py"]
