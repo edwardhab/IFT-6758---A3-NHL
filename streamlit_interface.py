@@ -112,6 +112,14 @@ def ping_game_id(game_id):
 
     # Unpack result and update tracker
     home_team, away_team, period, remainingTimeInPeriod, final_home_score, final_away_score, cumulative_home_xG, cumulative_away_xG, results_df = result
+
+    # Convert any NumPy numeric types to Python natives
+    final_home_score = int(final_home_score)
+    final_away_score = int(final_away_score)
+    period = int(period)
+    cumulative_home_xG = float(cumulative_home_xG)
+    cumulative_away_xG = float(cumulative_away_xG)
+
     data[model][game_id]['cumulative_home_xG'] += cumulative_home_xG
     data[model][game_id]['cumulative_away_xG'] += cumulative_away_xG
     data[model][game_id]['home_score'] = final_home_score
@@ -141,7 +149,9 @@ def ping_game_id(game_id):
     with st.container():
         st.subheader(f"Game {game_id}: {home_team} vs {away_team}")
         if period == 3 and remainingTimeInPeriod == '00:00':
-            st.write('Game already ended')  
+            st.write('Game already ended')
+        if period > 3:
+            st.write('Game has gone into overtime')  
         st.write(f'Period {period} - {remainingTimeInPeriod} left')
 
         total_home_xG = data[model][game_id]['cumulative_home_xG']
