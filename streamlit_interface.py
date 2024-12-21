@@ -170,6 +170,6 @@ def ping_game_id(game_id):
 
 # Input for game ID and button to trigger API call
 with st.container():
-    game_id = st.text_input("Specify the game ID to ping, e.g. 2021020329", '')
+    game_id = st.text_input("Specify the game ID to ping, e.g. 2024020521", '')
     if st.button('Ping game'):
         ping_game_id(game_id)
